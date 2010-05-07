@@ -193,7 +193,7 @@ var DataModelBase = Class.create({
             this.requestUpperBound = readOffset + readLimit;
             this.loadRange(
                     readOffset, readLimit,
-                    this.loadRangeSuccessHandler.bind(this, offset, limit, readOffset, readLimit, returnOffset, returnLimit, onSuccess),
+                    this.loadRangeSuccessHandler.bind(this, readOffset, readLimit, returnOffset, returnLimit, onSuccess),
                     onFailure);
         }
     },
@@ -208,7 +208,8 @@ var DataModelBase = Class.create({
 
         onSuccess(offset, limit, results.slice(0, limit));
     },
-    loadRangeSuccessHandler: function(offset, limit, readOffset, readLimit, returnOffset, returnLimit, onSuccess, results) {
+    
+    loadRangeSuccessHandler: function(readOffset, readLimit, returnOffset, returnLimit, onSuccess, results) {
         this.complete = this.setComplete(results, readLimit);
 
         // TODO : Check to see if this is the same data a the cache. If so, do not notify (If possible)
@@ -219,7 +220,7 @@ var DataModelBase = Class.create({
             this.initialPageSize = readLimit;
         }
 
-        Mojo.Log.info("Loaded %s from remote. Offset: %d readLimit: %d  known: %d results: %d", this.getCacheName(), offset, readLimit, this.getKnownSize(), results.length);
+        Mojo.Log.info("Loaded %s from remote. readLimit: %d  known: %d results: %d", this.getCacheName(), readLimit, this.getKnownSize(), results.length);
 
         // Load the new data into the memory cache
         var spliceArgs = $A(results);
