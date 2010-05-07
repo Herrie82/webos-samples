@@ -172,6 +172,7 @@ DataModelBaseTest.prototype.depotCacheReadTest = function(assistant, cont) {
         maxCount: 10,
         lookahead: 2
     });
+    dataModel.getCacheName = function() { return "dataModelTest-Depot"; };
 
     dataModel.getRange(4, 2,
         function(offset, limit, results) {
@@ -189,9 +190,10 @@ DataModelBaseTest.prototype.depotCacheReadTest = function(assistant, cont) {
 
             dataModel = new DataModelTest({
                 maxCount: 10,
-                lookahead: 2,
-                
+                lookahead: 2
             });
+            dataModel.getCacheName = function() { return "dataModelTest-Depot"; };
+
             // Allow us to stack a few requests
             dataModel.blockTimeout = 100;
             dataModel.offset = 10;
@@ -483,7 +485,7 @@ var DataModelTest = Class.create(DataModelBase, {
         this.offset = 0;
     },
     getCacheName: function() {
-        return "dataModelTest";
+        return "dataModelTest-" + new Date().getTime();
     },
     refresh: function($super, onSuccess, onFailure) {
         this.loadRangeHistory = [];
