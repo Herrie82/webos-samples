@@ -371,7 +371,6 @@ DataModelBaseTest.prototype.overlappingRequestsTest = function(assistant, cont) 
     dataModel.blockTimeout = 0;
 };
 
-
 DataModelBaseTest.prototype.refreshTest = function(assistant, cont) {
     var runCount = 0;
     var dataModel = new DataModelTest({
@@ -514,33 +513,35 @@ var DataModelTest = Class.create(DataModelBase, {
 
 
 function verifyRange(assistant, expected, dataModel, offset, limit, results) {
+    expected = expected || { results: []};
+
     if (offset !== expected.offset) {
-        assistant.failure("offset incorrect: " + offset + " " + expected.offset);
+        assistant.failure("offset incorrect: " + offset + " expected: " + expected.offset);
     }
     if (limit !== expected.limit) {
-        assistant.failure("limit incorrect: " + limit + " " + expected.limit);
+        assistant.failure("limit incorrect: " + limit + " expected: " + expected.limit);
     }
     if (expected.complete !== undefined && dataModel.isComplete() !== expected.complete) {
-        assistant.failure("Data Model Marked as complete: " + dataModel.isComplete() + " " + expected.complete);
+        assistant.failure("Data Model Marked as complete: " + dataModel.isComplete() + " expected: " + expected.complete);
     }
     if (expected.knownSize !== undefined && dataModel.getKnownSize() !== expected.knownSize) {
-        assistant.failure("Data Model known size unexpected: " + dataModel.getKnownSize() + " " + expected.knownSize);
+        assistant.failure("Data Model known size unexpected: " + dataModel.getKnownSize() + " expected: " + expected.knownSize);
     }
     if (expected.loadRangeCount !== undefined && dataModel.loadRangeHistory.length !== expected.loadRangeCount
             || (expected.loadRange !== undefined && (
                     dataModel.loadRangeHistory[expected.loadRangeCount-1].offset !== expected.loadRange.offset
                     || dataModel.loadRangeHistory[expected.loadRangeCount-1].limit !== expected.loadRange.limit)))  {
-        assistant.failure("Unexpected load history: " + Object.toJSON(dataModel.loadRangeHistory) + " " + expected.loadRangeCount + " " + Object.toJSON(expected.loadRange));
+        assistant.failure("Unexpected load history: " + Object.toJSON(dataModel.loadRangeHistory) + " expected: " + expected.loadRangeCount + " " + Object.toJSON(expected.loadRange));
     }
 
     if (!results
             || results.length !== expected.results.length) {
-        assistant.failure("Returned data incorrect: " + Object.toJSON(results) + " " + Object.toJSON(expected.results));
+        assistant.failure("Returned data incorrect: " + Object.toJSON(results) + " expected: " + Object.toJSON(expected.results));
     } else {
         var len = results.length;
         while (len--) {
             if (results[len] != expected.results[len]) {
-                assistant.failure("Returned data incorrect index: " + len + "data: " + Object.toJSON(results) + " " + Object.toJSON(expected.results));
+                assistant.failure("Returned data incorrect index: " + len + "data: " + Object.toJSON(results) + " expected: " + Object.toJSON(expected.results));
             }
         }
     }
