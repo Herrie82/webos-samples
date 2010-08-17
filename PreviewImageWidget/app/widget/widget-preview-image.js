@@ -5,6 +5,10 @@ const FLOW = [
         { className: "third", left: 1, center: 2, right: 0 },
     ];
 
+// Aspect ratio of maximum display region for a single image. This needs to be kept in sync
+// with the CSS source.
+const IMAGE_DISPLAY_ASPECT_RATIO = 0.66;
+
 Mojo.Widget.PreviewImage = Class.create({
     initialize: function() {
         // Avoid creating more locals in here as they will be kept alive by the closures in this method.
@@ -261,7 +265,7 @@ Mojo.Widget.PreviewImage = Class.create({
                 }
 
                 if (!orientation) {
-                    if (img.naturalWidth > img.naturalHeight) {
+                    if (img.naturalWidth/img.naturalHeight > IMAGE_DISPLAY_ASPECT_RATIO) {
                         img.addClassName("landscape");
                         img.removeClassName("portrait");
                     } else {
