@@ -1,0 +1,4 @@
+/* CSS used within this app only, independent of the widget */
+body {
+  background-color: black !important;
+}

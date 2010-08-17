@@ -1,0 +1,87 @@
+.preview-image > .preview-cell,
+.preview-image > .preview-cell > .preview-cell-wrapper > img {
+  width: 180px;
+  height: 270px;
+}
+
+.preview-image {
+  margin: 10px 0px;
+  height: 270px;
+  position: relative;
+}
+
+.preview-image > .preview-cell {
+  display: table;
+  position: absolute;
+  top: 0px;
+}
+
+.preview-image > .preview-cell > .preview-cell-wrapper {
+  display: table-cell;
+  vertical-align: middle;
+  width: 180px;
+}
+
+/*
+ * These selectors position the images based on the class applied to the parent class.
+ * The basic pattern for swapping these out is to change the parent class, which will
+ * Change the visible order of these images. If done carefully all should sync.
+ */
+.preview-image.first > div.preview-first,
+.preview-image.second > div.preview-third,
+.preview-image.third > div.preview-second {
+  left: -130px;
+}
+.preview-image.first > div.preview-second,
+.preview-image.second > div.preview-first,
+.preview-image.third > div.preview-third {
+  left: 70px;
+}
+.preview-image.first > div.preview-third,
+.preview-image.second > div.preview-second,
+.preview-image.third > div.preview-first {
+  right: -130px;
+}
+
+.preview-image > .preview-cell > .preview-cell-wrapper > img {
+  display: block;
+  margin: auto;
+}
+.preview-image > .preview-cell > .preview-cell-wrapper > img.landscape {
+  height: auto;
+}
+.preview-image > .preview-cell > .preview-cell-wrapper > img.portrait {
+  width: auto;
+}
+
+
+/* Pixi overrides for the preview image... This CSS might be way too complicated... */
+@media screen and (max-device-height : 400px) {
+    .preview-image > .preview-cell,
+    .preview-image > .preview-cell > .preview-cell-wrapper > img {
+        width: 150px;
+        height: 225px;
+    }
+    .preview-image {
+        height: 225px;
+    }
+    .preview-image > .preview-cell > .preview-cell-wrapper {
+        width: 150px;
+    }
+
+    .preview-image.first > div.preview-first,
+    .preview-image.second > div.preview-third,
+    .preview-image.third > div.preview-second {
+        left: -125px;
+    }
+    .preview-image.first > div.preview-second,
+    .preview-image.second > div.preview-first,
+    .preview-image.third > div.preview-third {
+        left: 75px;
+    }
+    .preview-image.first > div.preview-third,
+    .preview-image.second > div.preview-second,
+    .preview-image.third > div.preview-first {
+        right: -105px;
+    }
+}

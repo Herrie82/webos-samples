@@ -15,6 +15,8 @@ var DataModelBase = Class.create({
         (this.refreshQueue.getSuccessHandler())();    // We want to start out in an open state
 
         this.cache = [];
+        this.headPending = [];
+        this.tailPending = [];
         this.requestUpperBound = 0;
         this.blockedRequests = [];
         this.initialPageSize = this.options.initialPageSize;
@@ -88,7 +90,7 @@ var DataModelBase = Class.create({
      * this is also the total number of elements.
      */
     getKnownSize: function() {
-        return this.cache.length;
+        return this.headPending.length + this.cache.length + this.tailPending.length;
     },
 
     /**
@@ -130,24 +132,63 @@ var DataModelBase = Class.create({
         return results.length < readLimit;
     },
 
+    addPending: function(item, tail) {
+        if (tail) {
+            this.tailPending.push(item);
+        } else {
+            this.headPending.unshift(item);
+        }
+    },
+    removePending: function(item, tail) {
+        var list = tail ? this.tailPending : this.headPending,
+            len = list.length;
+        for (var i = 0; i < len; i++) {
+            if (this.pendingMatch(item, list[i])) {
+                list.splice(i, 1);
+                return;
+            }
+        }
+    },
+    pendingMatch: function(newItem, pendingItem) {
+        return newItem === pendingItem;
+    },
+
+    extractFromArray: function(offset, limit, src, dest) {
+        if (offset >= 0 && limit > 0) {
+            dest.push.apply(dest, src.slice(offset, offset+limit));
+        }
+        return Math.max(0, offset - src.length);
+    },
+
     /*
      * Internal methods.
      */
     getRangeWorker: function(offset, limit, onSuccess, onFailure) {
-        var returnOffset = offset,
+        var cacheRet = [],
+            returnOffset = offset,
             returnLimit = limit;
-        if (offset < this.cache.length) {
-            // In memory cache is available, nice and easy now
-            var inCache = Math.min(this.cache.length, offset+limit)-offset;
-            onSuccess.curry(offset, inCache, this.cache.slice(offset, offset+inCache)).defer();
 
-            // IF we are not getting anywhere near the end of the cache, do not send another request
-            if (returnOffset+limit+this.options.lookahead < this.requestUpperBound) {
-                return;
-            }
+        // Pull any data out of the pending head list
+        var dataOffset = offset;
+        dataOffset = this.extractFromArray(dataOffset, returnLimit, this.headPending, cacheRet);
+        var headUsed = cacheRet.length;
 
-            returnOffset += inCache;
-            returnLimit -= inCache;
+        // Adjust the offset to be relative to the cache
+        returnOffset = Math.max(0, returnOffset-headUsed);
+        returnLimit -= headUsed;
+
+        dataOffset = this.extractFromArray(dataOffset, returnLimit, this.cache, cacheRet);
+        var cacheUsed = cacheRet.length - headUsed;
+
+        // Adjust the offset to be relative to the end of the cache
+        returnOffset += cacheUsed;
+        returnLimit -= cacheUsed;
+
+        // Load the tail sections, we don't care about the outcome here as it is "temp" data
+        this.extractFromArray(dataOffset, returnLimit, this.tailPending, cacheRet);
+
+        if (cacheRet.length) {            // In memory cache is available, nice and easy now
+            onSuccess.curry(offset, cacheRet.length, cacheRet).defer();
         }
 
         if (returnLimit && returnOffset < this.requestUpperBound) {
@@ -158,13 +199,15 @@ var DataModelBase = Class.create({
             });
             Mojo.Log.info("Pushed blocking queue: %j", this.blockedRequests[this.blockedRequests.length-1]);
 
-            // IF we are not getting anywhere near the end of the cache, do not send another request
-            if (returnOffset+limit+this.options.lookahead < this.requestUpperBound) {
-                return;
-            }
-
             returnOffset += blockLimit;
             returnLimit -= blockLimit;
+        }
+
+        // IF we are not getting anywhere near the end of the cache, do not send another request
+        // TODO : Also make sure that we request more data if we stray into the tail pending zone
+        Mojo.Log.info("cache ret: off: %d lim: %d look: %d upper: %d", returnOffset, limit, this.options.lookahead, this.requestUpperBound);
+        if (offset+limit+this.options.lookahead < this.requestUpperBound) {
+            return;
         }
 
         Mojo.Log.info("offsets: offset: %d returnOffset: %d requestUpperBound: %d", offset, returnOffset, this.requestUpperBound);
@@ -174,8 +217,8 @@ var DataModelBase = Class.create({
         if (!this.isComplete()) {
             var readOffset = this.requestUpperBound,
                 readLimit = limit;
-            if (offset > readOffset) {
-                readLimit = offset+limit-readOffset;
+            if (returnOffset > readOffset) {
+                readLimit = returnOffset+limit-readOffset;
             }
 
             // We are requesting a larger buffer than our caller requested to reduce the number of request
@@ -193,7 +236,7 @@ var DataModelBase = Class.create({
             this.requestUpperBound = readOffset + readLimit;
             this.loadRange(
                     readOffset, readLimit,
-                    this.loadRangeSuccessHandler.bind(this, readOffset, readLimit, returnOffset, returnLimit, onSuccess),
+                    this.loadRangeSuccessHandler.bind(this, readOffset, readLimit, returnOffset, returnLimit, this.headPending.length, onSuccess),
                     onFailure);
         }
     },
@@ -209,7 +252,7 @@ var DataModelBase = Class.create({
         onSuccess(offset, limit, results.slice(0, limit));
     },
     
-    loadRangeSuccessHandler: function(readOffset, readLimit, returnOffset, returnLimit, onSuccess, results) {
+    loadRangeSuccessHandler: function(readOffset, readLimit, returnOffset, returnLimit, headOffset, onSuccess, results) {
         this.complete = this.setComplete(results, readLimit);
 
         // TODO : Check to see if this is the same data a the cache. If so, do not notify (If possible)
@@ -227,10 +270,16 @@ var DataModelBase = Class.create({
         spliceArgs.unshift(readOffset, results.length);
         this.cache.splice.apply(this.cache, spliceArgs);
 
+        // For each entry check to see if it exists in the pending list
+        var len = results.length;
+        while (len--) {
+            this.removePending(results[len], true);
+        }
+
         if (returnLimit) {
             var sliceOff = returnOffset-readOffset,
                 sliceLimit = sliceOff + returnLimit;
-            onSuccess(returnOffset, returnLimit, results.slice(sliceOff, sliceLimit));
+            onSuccess(returnOffset+headOffset, returnLimit, results.slice(sliceOff, sliceLimit));
         } else {
             Mojo.Log.info("Unexpected return: %d read: %d", returnOffset, readOffset);
         }

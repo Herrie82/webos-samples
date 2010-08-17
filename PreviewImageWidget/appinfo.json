@@ -1,0 +1,9 @@
+{
+    "id": "com.palm.sample.previewimageview",
+    "version": "1.0.0",
+    "vendor": "Palm",
+    "type": "web",
+    "main": "index.html",
+    "title": "PreviewImageView",
+    "icon": "icon.png"
+}
