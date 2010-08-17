@@ -284,11 +284,14 @@ Mojo.Widget.PreviewImage = Class.create({
 
             container.addClassName("loading");
             container.removeClassName("empty");
-            container.appendChild(img);
             if (center) {
+                container.appendChild(img);
                 img.src = url;
             } else {
-                this.centerQueue.queue(function() { img.src = url; });
+                this.centerQueue.queue(function() {
+                    container.appendChild(img);
+                    img.src = url;
+                });
             }
             this.refreshImageStates();
         } else if (center) {
