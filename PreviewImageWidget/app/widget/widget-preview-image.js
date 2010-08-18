@@ -230,8 +230,8 @@ Mojo.Widget.PreviewImage = Class.create({
         this.rightEl = childEl[curFlow.right];
     },
     refreshImageStates: function() {
-        this.hasLeft = !!this.leftEl.querySelector("img");
-        this.hasRight = !!this.rightEl.querySelector("img");
+        this.hasLeft = !!this.leftEl.querySelector("img,.loading");
+        this.hasRight = !!this.rightEl.querySelector("img,.loading");
     },
 
     leftUrlProvided: function(url, orientation) {
