@@ -10,9 +10,6 @@ function MainAssistant() {
 
 MainAssistant.prototype.setup = function() {
     this.imageView = this.controller.get('preview-image');
-    this.imageView.style.height = Mojo.Environment.DeviceInfo.screenHeight + "px";
-    this.imageView.style.width = Mojo.Environment.DeviceInfo.screenWidth + "px";
-
     this.controller.setupWidget(
         "preview-image",
         {}, {
