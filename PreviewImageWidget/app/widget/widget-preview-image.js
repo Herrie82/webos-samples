@@ -114,6 +114,7 @@ Mojo.Widget.PreviewImage = Class.create({
         offset += this.dragOff;
 
         if (Math.abs(offset) > this.dragBoundary) {
+            // Determine which direction we need to move, if any, and update our tracking variables to reflect this.
             moveDir = this.canMove(offset);
 
             if (moveDir !== undefined) {
@@ -128,6 +129,7 @@ Mojo.Widget.PreviewImage = Class.create({
         this.curOffset = offset;
 
         if (moveDir !== undefined) {
+            // Perform any swaps that need to occur at the DOM level
             this.move(moveDir);
         }
     },
@@ -264,6 +266,7 @@ Mojo.Widget.PreviewImage = Class.create({
                     return;
                 }
 
+                // Setup the image orientation loader (or explicitly set it if we already know what it is)
                 if (!orientation) {
                     if (img.naturalWidth/img.naturalHeight > IMAGE_DISPLAY_ASPECT_RATIO) {
                         img.addClassName("landscape");
