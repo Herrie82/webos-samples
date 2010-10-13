@@ -243,7 +243,7 @@ var DataModelBase = Class.create(Observable, {
      * Internal methods.
      */
     getRangeWorker: function(offset, limit, onSuccess, onFailure) {
-        var rangeData = this.extractRange(offset, limit);
+        var rangeData = this.extractRange({ offset: offset, limit: limit });
         if (this.complete || rangeData.available.length) {            // In memory cache is available, nice and easy now
             onSuccess.curry(offset, rangeData.available.length, rangeData.available).defer();
         }
@@ -424,7 +424,7 @@ var DataModelBase = Class.create(Observable, {
             var entry = this.blockedRequests[i];
             if (this.complete || entry.offset < cacheLen) {
                 Mojo.Log.info("Process blocked request: %j", entry);
-                var rangeData = this.extractRange(entry.offset, entry.limit);
+                var rangeData = this.extractRange(entry);
                 if (this.complete || rangeData.available.length) {
                     entry.onSuccess.curry(entry.offset, rangeData.available.length, rangeData.available).defer();
 
@@ -441,14 +441,13 @@ var DataModelBase = Class.create(Observable, {
             }
         }
     },
-    extractRange: function(offset, limit) {
+    extractRange: function(entry) {
         var cacheRet = [],
-            remainingOffset = offset,
-            remainingLimit = limit;
+            remainingOffset = entry.offset,
+            remainingLimit = entry.limit;
 
         // Pull any data out of the pending head list
-        var dataOffset = offset;
-        dataOffset = this.extractFromArray(dataOffset, remainingLimit, this.headPending, cacheRet);
+        var dataOffset = this.extractFromArray(entry.offset, remainingLimit, this.headPending, cacheRet);
         var headUsed = cacheRet.length;
 
         // Adjust the offset to be relative to the cache
