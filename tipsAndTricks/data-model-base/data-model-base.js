@@ -419,7 +419,7 @@ var DataModelBase = Class.create(Observable, {
             cacheLen = this.headPending.length + this.cache.length + this.tailPending.length;
         for (var i = 0; i < len; i++) {
             var entry = this.blockedRequests[i];
-            if (entry.offset < cacheLen) {
+            if (this.complete || entry.offset < cacheLen) {
                 Mojo.Log.info("Process blocked request: %j", entry);
                 var rangeData = this.extractRange(entry.offset, entry.limit);
                 if (this.complete || rangeData.available.length) {
