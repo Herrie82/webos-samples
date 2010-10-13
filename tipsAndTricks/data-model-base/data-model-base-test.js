@@ -393,6 +393,28 @@ DataModelBaseTest.prototype.refreshTest = function(assistant, cont) {
         dataModel.blockTimeout = 100;
         dataModel.offset = 10;
 
+        // Load in process
+        dataModel.getRange(4, 2,
+            function(offset, limit, results) {
+                verifyRange(
+                    assistant, {
+                        offset: 4,
+                        limit: 2,
+                        knownSize: 6,
+                        complete: false,
+                        loadRangeCount: 1,
+                        results: [ 6, 5 ]
+                    },
+                    dataModel, offset, limit, results);
+                if (++returnCount !== 1) {
+                    assistant.failure("Refresh call was not blocking: prerequest");
+                }
+            },
+            function(failure) {
+                assistant.failure("Recieved failure");
+                cont();
+            });
+
         dataModel.refresh(
                 function(results) {
                     verifyRange(
@@ -401,12 +423,12 @@ DataModelBaseTest.prototype.refreshTest = function(assistant, cont) {
                                 limit: 0,
                                 knownSize: 8,
                                 complete: false,
-                                loadRangeCount: 1,
+                                loadRangeCount: 2,
                                 results: [ 20, 9, 8, 7, 6, 5, 4, 3 ]
                             },
-                            dataModel, 0, 0, results);
-                    if (++returnCount !== 1) {
-                        assistant.failure("Refresh call was not blocking");
+                            dataModel, 0, 0, results.results);
+                    if (++returnCount !== 2) {
+                        assistant.failure("Refresh call was not blocking: refresh1");
                     }
                 },
                 function() {
@@ -422,11 +444,11 @@ DataModelBaseTest.prototype.refreshTest = function(assistant, cont) {
                                 limit: 0,
                                 knownSize: 8,
                                 complete: false,
-                                loadRangeCount: 1,
+                                loadRangeCount: 2,
                                 results: [ 20, 9, 8, 7, 6, 5, 4, 3 ]
                             },
-                            dataModel, 0, 0, results);
-                    if (++returnCount !== 2) {
+                            dataModel, 0, 0, results.results);
+                    if (++returnCount !== 3) {
                         assistant.failure("Refresh call was not blocking");
                     }
                 },
@@ -447,7 +469,7 @@ DataModelBaseTest.prototype.refreshTest = function(assistant, cont) {
                         results: [ 6, 5 ]
                     },
                     dataModel, offset, limit, results);
-                if (++returnCount !== 3) {
+                if (++returnCount !== 4) {
                     assistant.failure("Refresh call was not blocking");
                 }
                 if (returnCount >= 3) {
