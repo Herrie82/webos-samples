@@ -1,13 +1,17 @@
 /* Copyright 2010 Palm, Inc. All rights reserved. */
+/*global Mojo:false, Observable, CacheManager, OperationQueue */
 
 /**
  * Provides a paging and caching implementation for data models who pull from remote data sources.
  */
-var DataModelBase = Class.create({
-    initialize: function(options) {
+var DataModelBase = Class.create(Observable, {
+    initialize: function($super, options) {
+        $super();
+
         this.options = Object.extend({
             lookahead: 20,
             initialPageSize: 20,
+            cacheSaveDelay: 5000,
         }, options);
 
         this.cacheManager = new CacheManager(this.options.cacheName, this.options.cacheTimeout);
@@ -20,6 +24,21 @@ var DataModelBase = Class.create({
         this.requestUpperBound = 0;
         this.blockedRequests = [];
         this.initialPageSize = this.options.initialPageSize;
+        this.requestCount = 0;
+        this.pendingRequests = {};
+
+        this.sequenceId = 0;
+    },
+
+    observeLength: function(fn) {
+        Mojo.requireFunction(fn, "DataModelBase.observeLength: 'fn' parameter must be a function.");
+        this.lengthObservable = this.lengthObservable || new Observable();
+        this.lengthObservable.observe(fn);
+    },
+    stopObservingLength: function(fn) {
+        if (this.lengthObservable) {
+            this.lengthObservable.stopObserving(fn);
+        }
     },
 
     /**
@@ -65,24 +84,56 @@ var DataModelBase = Class.create({
             this.refreshQueue.queue({
                     onSuccess: onSuccess,
                     onFailure: onFailure
-                })
+                });
             return;
         }
 
+        this.cancelWorker();
         this.refreshQueue.reset();
+        this.remoteLoaded = false;
+        this.savedCache = false;
+        this.complete = false;
 
         try {
             Mojo.Log.info("Refresh %s from remote. readLimit %d", this.getCacheName(), readLimit);
-            this.loadRange(
+            this.loadRangeWorker(
                     0, readLimit,
-                    this.refreshQueue.getSuccessHandler(
-                            this.refreshSuccessHandler.bind(this, this.initialPageSize, readLimit, onSuccess)),
-                    this.refreshQueue.getFailureHandler());
+                    this.refreshSuccessHandler.bind(this, this.initialPageSize, readLimit, this.refreshQueue.getSuccessHandler(onSuccess)),
+                    this.refreshQueue.getFailureHandler(onFailure));
         } catch (err) {
             Mojo.Log.error("Refresh request failed: %s: %s", err);
             (this.refreshQueue.getFailureHandler())(err);
             throw err;
         }
+    },
+
+    /**
+     * Cancels all pending requests.
+     */
+    cancel: function() {
+        // Cleanup our internal structures.
+        this.cancelWorker();
+
+        // Notify any pending operations that they are done
+        var len = this.blockedRequests.length;
+        for (var i = 0; i < len; i++) {
+            var request = this.blockedRequests[i];
+            request.onFailure && request.onFailure(request.offset, request.limit);
+        }
+        this.blockedRequests = [];
+    },
+    cancelWorker: function() {
+        // Cancel all of the requests that are currently pending.
+        for (var i in this.pendingRequests) {
+            if (this.pendingRequests.hasOwnProperty(i)) {
+                var x = this.pendingRequests[i];
+                x && x.cancel && x.cancel();
+                delete this.pendingRequests[i];
+            }
+        }
+        this.sequenceNum++;
+
+        this.refreshQueue.getSuccessHandler()();
     },
 
     /**
@@ -128,8 +179,15 @@ var DataModelBase = Class.create({
      * have limit elements read, but subclasses may override this for
      * more temperamental data sources.
      */
-    setComplete: function(results, readLimit) {
-        return results.length < readLimit;
+    setComplete: function(results, readLimit, resultOffset, responseLen) {
+        return (responseLen || results.length) < readLimit;
+    },
+
+    notifyUpdatedItem: function(index) {
+        this.notifyObservers({
+            model: this,
+            updatedItem: index
+        });
     },
 
     addPending: function(item, tail) {
@@ -138,87 +196,88 @@ var DataModelBase = Class.create({
         } else {
             this.headPending.unshift(item);
         }
+        this.notifyLengthObservers();
     },
-    removePending: function(item, tail) {
+    pendingIndex: function(item, tail) {
         var list = tail ? this.tailPending : this.headPending,
             len = list.length;
         for (var i = 0; i < len; i++) {
             if (this.pendingMatch(item, list[i])) {
-                list.splice(i, 1);
-                return;
+                return i;
             }
+        }
+    },
+    removePending: function(item, tail) {
+        var list = tail ? this.tailPending : this.headPending,
+            i = this.pendingIndex(item, tail);
+        if (i !== undefined) {
+            list.splice(i, 1);
+            this.notifyLengthObservers();
+            return i;
         }
     },
     pendingMatch: function(newItem, pendingItem) {
         return newItem === pendingItem;
     },
 
-    extractFromArray: function(offset, limit, src, dest) {
-        if (offset >= 0 && limit > 0) {
-            dest.push.apply(dest, src.slice(offset, offset+limit));
-        }
-        return Math.max(0, offset - src.length);
+    requestCleaner: function(requestId, callback) {
+        var self = this;
+        return function() {
+            if (self.pendingRequests[requestId]) {
+                delete self.pendingRequests[requestId];
+            }
+            return callback && callback.apply(this, arguments);
+        };
+    },
+
+    /**
+     * Method called by the refresh handler to enable limited diffing on
+     * the new and old datasets.
+     */
+    getChangedElements: function(newList, oldList) {
+        // NOP Under the default implementation
     },
 
     /*
      * Internal methods.
      */
     getRangeWorker: function(offset, limit, onSuccess, onFailure) {
-        var cacheRet = [],
-            returnOffset = offset,
-            returnLimit = limit;
-
-        // Pull any data out of the pending head list
-        var dataOffset = offset;
-        dataOffset = this.extractFromArray(dataOffset, returnLimit, this.headPending, cacheRet);
-        var headUsed = cacheRet.length;
-
-        // Adjust the offset to be relative to the cache
-        returnOffset = Math.max(0, returnOffset-headUsed);
-        returnLimit -= headUsed;
-
-        dataOffset = this.extractFromArray(dataOffset, returnLimit, this.cache, cacheRet);
-        var cacheUsed = cacheRet.length - headUsed;
-
-        // Adjust the offset to be relative to the end of the cache
-        returnOffset += cacheUsed;
-        returnLimit -= cacheUsed;
-
-        // Load the tail sections, we don't care about the outcome here as it is "temp" data
-        this.extractFromArray(dataOffset, returnLimit, this.tailPending, cacheRet);
-
-        if (cacheRet.length) {            // In memory cache is available, nice and easy now
-            onSuccess.curry(offset, cacheRet.length, cacheRet).defer();
+        var rangeData = this.extractRange(offset, limit);
+        if (this.complete || rangeData.available.length) {            // In memory cache is available, nice and easy now
+            onSuccess.curry(offset, rangeData.available.length, rangeData.available).defer();
+        }
+        if (this.complete) {
+            return;
         }
 
-        if (returnLimit && returnOffset < this.requestUpperBound) {
-            var blockLimit = Math.min(returnLimit, this.requestUpperBound-returnOffset);
+        if (rangeData.remainingLimit) {
             this.blockedRequests.push({
-                offset: returnOffset, limit: blockLimit,
+                offset: rangeData.remainingOffset, limit: rangeData.remainingLimit,
                 onSuccess: onSuccess, onFailure: onFailure
             });
             Mojo.Log.info("Pushed blocking queue: %j", this.blockedRequests[this.blockedRequests.length-1]);
-
-            returnOffset += blockLimit;
-            returnLimit -= blockLimit;
         }
 
         // IF we are not getting anywhere near the end of the cache, do not send another request
         // TODO : Also make sure that we request more data if we stray into the tail pending zone
-        Mojo.Log.info("cache ret: off: %d lim: %d look: %d upper: %d", returnOffset, limit, this.options.lookahead, this.requestUpperBound);
-        if (offset+limit+this.options.lookahead < this.requestUpperBound) {
+        if (offset+limit+this.options.lookahead <= this.requestUpperBound) {
             return;
         }
 
-        Mojo.Log.info("offsets: offset: %d returnOffset: %d requestUpperBound: %d", offset, returnOffset, this.requestUpperBound);
-        Mojo.Log.info("limit: limit: %d returnLimit: %d", limit, returnLimit);
+        Mojo.Log.info("offsets: offset: %d remainingOffset: %d requestUpperBound: %d", offset, rangeData.remainingOffset, this.requestUpperBound);
+        Mojo.Log.info("limit: limit: %d remainingLimit: %d", limit, rangeData.remainingLimit);
 
         // Make more requests for anything that is not currently available.
         if (!this.isComplete()) {
             var readOffset = this.requestUpperBound,
-                readLimit = limit;
-            if (returnOffset > readOffset) {
-                readLimit = returnOffset+limit-readOffset;
+                readLimit = limit,
+                cacheName = this.getCacheName();
+            if (rangeData.remainingOffset > readOffset) {
+                readLimit = rangeData.remainingOffset+limit-readOffset;
+            } else if (readOffset + readLimit <= readOffset) {
+                // If the request does not go past our current window, only read ahead by
+                // the lookahead size
+                readLimit = 0;
             }
 
             // We are requesting a larger buffer than our caller requested to reduce the number of request
@@ -226,49 +285,87 @@ var DataModelBase = Class.create({
             readLimit = readLimit + this.options.lookahead;
 
             // Start a cache load if we have not already
-            if (!offset) {
-                this.cacheManager.load(
-                        this.getCacheName(),
-                        this.loadCacheSuccessHandler.bind(this, offset, limit, onSuccess));
+            Mojo.Log.info("Check cache: %s %d", cacheName, offset);
+            if (!offset && cacheName) {
+                this.cacheManager.load(cacheName, this.loadCacheSuccessHandler.bind(this));
             }
 
             Mojo.Log.info("Request %s from remote. Offset: %d limit: %d readOffset: %d readLimit %d known: %d", this.getCacheName(), offset, limit, readOffset, readLimit, this.getKnownSize());
             this.requestUpperBound = readOffset + readLimit;
-            this.loadRange(
+            this.loadRangeWorker(
                     readOffset, readLimit,
-                    this.loadRangeSuccessHandler.bind(this, readOffset, readLimit, returnOffset, returnLimit, this.headPending.length, onSuccess),
-                    onFailure);
+                    this.loadRangeSuccessHandler.bind(this, this.sequenceId, readOffset, readLimit, this.headPending.length),
+                    this.loadRangeFailureHandler.bind(this, readOffset, readLimit));
         }
     },
-    loadCacheSuccessHandler: function(offset, limit, onSuccess, results) {
+    loadRangeWorker: function(offset, limit, successHandler, failureHandler) {
+        var requestId = this.requestCount++,
+            request = this.loadRange(offset, limit, this.requestCleaner(requestId, successHandler), this.requestCleaner(requestId, failureHandler));
+        if (request) {
+            this.pendingRequests[requestId] = request;
+        }
+    },
+    loadCacheSuccessHandler: function(results) {
+        if (this.remoteLoaded) {
+            // Data already loaded
+            Mojo.Log.info("Ignoring load cache. Already loaded from remote.");
+            return;
+        }
+
+        results = this.fromCacheDB(results);
+        Mojo.Log.info("Load cache: %o", results && results.length);
+
         if (!results) {
             // Cache not found
             return;
         }
 
-        this.initialPageSize = results.length;
+        this.initialPageSize = Math.max(this.initialPageSize, results.length);
         this.cache = results;
 
-        onSuccess(offset, limit, results.slice(0, limit));
+        this.notifyPendingRequests();
+        this.notifyLengthObservers();
     },
-    
-    loadRangeSuccessHandler: function(readOffset, readLimit, returnOffset, returnLimit, headOffset, onSuccess, results) {
-        this.complete = this.setComplete(results, readLimit);
 
-        // TODO : Check to see if this is the same data a the cache. If so, do not notify (If possible)
-        if (!readOffset) {
-            // First load, store off the cache data
-            Mojo.Log.info("Store load results: %j", results);
-            this.cacheManager.store(this.getCacheName(), results);
-            this.initialPageSize = readLimit;
+    loadRangeSuccessHandler: function(sequenceId, readOffset, readLimit, headOffset, results, resultOffset, responseLen) {
+        if (sequenceId !== this.sequenceId) {
+            Mojo.Log.info("Ignoring remote %s response due to invalid sequence sequnceId: %d readLimit: %d  known: %d results: %d resultOffset: %d responseLen: %d", this.getCacheName(), sequenceId, readLimit, this.getKnownSize(), results.length, resultOffset, responseLen);
+            return;
         }
 
-        Mojo.Log.info("Loaded %s from remote. readLimit: %d  known: %d results: %d", this.getCacheName(), readLimit, this.getKnownSize(), results.length);
+        var cacheName = this.getCacheName();
+
+        // Force results to be an array, to work arround the {} bug
+        if (!results.length) {
+            results = [];
+        }
+
+        resultOffset = resultOffset || 0;
+
+        if (!this.remoteLoaded) {
+            this.cache = [];
+        }
+
+        this.remoteLoaded = true;
+        this.complete = this.setComplete(results, readLimit, resultOffset, responseLen);
+
+        Mojo.Log.info("Loaded %s from remote. readLimit: %d  known: %d results: %d resultOffset: %d responseLen: %d", this.getCacheName(), readLimit, this.getKnownSize(), results.length, resultOffset, responseLen);
 
         // Load the new data into the memory cache
         var spliceArgs = $A(results);
-        spliceArgs.unshift(readOffset, results.length);
+        spliceArgs.unshift(readOffset+resultOffset, results.length);
         this.cache.splice.apply(this.cache, spliceArgs);
+
+        // TODO : Check to see if this is the same data a the cache. If so, do not notify (If possible)
+        if (!this.savedCache && !readOffset && (!responseLen || this.cache.length === responseLen) && cacheName) {
+            // First load, store off the cache data
+            this.initialPageSize = readLimit;
+            this.savedCache = true;
+            var self = this;
+            setTimeout(function() {
+                self.cacheManager.store(cacheName, self.toCacheDB(self.cache));
+            }, this.options.cacheSaveDelay);
+        }
 
         // For each entry check to see if it exists in the pending list
         var len = results.length;
@@ -276,37 +373,151 @@ var DataModelBase = Class.create({
             this.removePending(results[len], true);
         }
 
-        if (returnLimit) {
-            var sliceOff = returnOffset-readOffset,
-                sliceLimit = sliceOff + returnLimit;
-            onSuccess(returnOffset+headOffset, returnLimit, results.slice(sliceOff, sliceLimit));
-        } else {
-            Mojo.Log.info("Unexpected return: %d read: %d", returnOffset, readOffset);
+        this.notifyPendingRequests();
+        this.notifyLengthObservers();
+    },
+    loadRangeFailureHandler: function(sequenceId, readOffset, readLimit, response) {
+        if (sequenceId !== this.sequenceId) {
+            Mojo.Log.info("Ignoring remote %s failure response due to invalid sequence sequnceId: %d readOffset: %d readLimit: %d ", this.getCacheName(), sequenceId, readOffset, readLimit);
+            return;
         }
 
         var len = this.blockedRequests.length,
-            cacheLen = this.cache.length;
+            readRange = { offset: readOffset, limit: readLimit };
         for (var i = 0; i < len; i++) {
             var entry = this.blockedRequests[i];
-            if (entry.offset < cacheLen) {
+            if (this.rangeOverlap(readRange, entry)) {
+                Mojo.Log.info("Process blocked request: %j", entry);
+                entry.onFailure && entry.onFailure.curry(readOffset, readLimit, response).defer();
+
                 this.blockedRequests.splice(i, 1);
-                this.getRange(entry.offset, entry.limit, entry.onSuccess, entry.onFailure);
                 i--;    len--;
             }
         }
     },
+    rangeOverlap: function(rangeOne, rangeTwo) {
+        if (rangeOne.offset > rangeTwo.offset) {
+            // Swap the vars so the rangeOne is always the first element
+            var tmp = rangeOne;
+            rangeOne = rangeTwo;
+            rangeTwo = tmp;
+        }
 
-    refreshSuccessHandler: function(limit, readLimit, onSuccess, results) {
-        Mojo.Log.info("Refreshed %s from remote. readLimit: %d  results: %d", this.getCacheName(), readLimit, results.length);
+        var oneLen = rangeOne.offset + rangeOne.limit;
+        if (oneLen > rangeTwo.offset) {
+            // Range one extends into range two
+            return {
+                offset: rangeTwo.offset,
+                limit: Math.min(oneLen, rangeTwo.offset+rangeTwo.limit)
+            };
+        }
+    },
 
-        var oldList = this.cache;
+    notifyPendingRequests: function() {
+        // TODO : Add tests for this with pending data involved
+        var len = this.blockedRequests.length,
+            cacheLen = this.headPending.length + this.cache.length + this.tailPending.length;
+        for (var i = 0; i < len; i++) {
+            var entry = this.blockedRequests[i];
+            if (entry.offset < cacheLen) {
+                Mojo.Log.info("Process blocked request: %j", entry);
+                var rangeData = this.extractRange(entry.offset, entry.limit);
+                if (this.complete || rangeData.available.length) {
+                    entry.onSuccess.curry(entry.offset, rangeData.available.length, rangeData.available).defer();
 
-        this.complete = this.setComplete(results, readLimit);
+                    if (this.remoteLoaded) {
+                        if (!rangeData.remainingLimit) {
+                            this.blockedRequests.splice(i, 1);
+                            i--;    len--;
+                        } else {
+                            entry.offset = rangeData.remainingOffset;
+                            entry.limit = rangeData.remainingLimit;
+                        }
+                    }
+                }
+            }
+        }
+    },
+    extractRange: function(offset, limit) {
+        var cacheRet = [],
+            remainingOffset = offset,
+            remainingLimit = limit;
+
+        // Pull any data out of the pending head list
+        var dataOffset = offset;
+        dataOffset = this.extractFromArray(dataOffset, remainingLimit, this.headPending, cacheRet);
+        var headUsed = cacheRet.length;
+
+        // Adjust the offset to be relative to the cache
+        remainingOffset = Math.max(0, remainingOffset-headUsed);
+        remainingLimit -= headUsed;
+
+        dataOffset = this.extractFromArray(dataOffset, remainingLimit, this.cache, cacheRet);
+        var cacheUsed = this.remoteLoaded ? cacheRet.length - headUsed : 0;
+
+        // Adjust the offset to be relative to the end of the cache
+        remainingOffset += cacheUsed;
+        remainingLimit -= cacheUsed;
+
+        // Load the tail sections, we don't care about the outcome here as it is "temp" data
+        this.extractFromArray(dataOffset, remainingLimit, this.tailPending, cacheRet);
+
+        return {
+            available: cacheRet,
+            remainingOffset: remainingOffset,
+            remainingLimit: remainingLimit
+        };
+    },
+    extractFromArray: function(offset, limit, src, dest) {
+        if (offset >= 0 && limit > 0) {
+            dest.push.apply(dest, src.slice(offset, offset+limit));
+        }
+        return Math.max(0, offset - src.length);
+    },
+
+    refreshSuccessHandler: function(limit, readLimit, onSuccess, results, resultOffset, responseLen) {
+        Mojo.Log.info("Refreshed %s from remote. readLimit: %d  results: %d  resultOffset: %d", this.getCacheName(), readLimit, results.length, resultOffset);
+
+        if (resultOffset) {
+            // If this is segmented, we want to treat future results as a generic load range operation without a callback
+            this.loadRangeSuccessHandler(this.sequenceId, 0, readLimit, 0, results, resultOffset, responseLen);
+            return;
+        }
+
+        var cacheName = this.getCacheName(),
+            changed = this.getChangedElements(results, this.cache);
+
+        resultOffset = resultOffset || 0;
+
+        this.remoteLoaded = true;
+        this.complete = this.setComplete(results, readLimit, resultOffset, responseLen);
         this.requestUpperBound = readLimit;
         this.cache = results;
 
-        this.cacheManager.store(this.getCacheName(), results);
+        // Clear out any pending lists
+        this.headPending = [];
+        this.tailPending = [];
 
-        onSuccess(results);
-    }
+        if (cacheName && (!responseLen || this.cache.length === responseLen)) {
+            this.savedCache = true;
+            var self = this;
+            setTimeout(function() {
+                self.cacheManager.store(cacheName, self.toCacheDB(results));
+            }, this.options.cacheSaveDelay);
+        }
+
+        onSuccess({ results: results, changed: changed, limit: limit });
+        this.notifyLengthObservers();
+    },
+
+    notifyLengthObservers: function() {
+        this.lengthObservable && this.lengthObservable.notifyObservers({model: this, length: this.getKnownSize()});
+    },
+
+    toCacheDB: function(data) {
+        return JSON.stringify(data);
+    },
+    fromCacheDB: function(data) {
+        return data && JSON.parse(data);
+    },
 });
