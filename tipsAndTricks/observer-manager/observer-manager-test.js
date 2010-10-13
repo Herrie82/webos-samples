@@ -138,22 +138,22 @@ ObserverManagerTest.prototype.registerObservers = function(observerManager, obse
 };
 ObserverManagerTest.prototype.verifyObservers = function(immediate, stage, scene, batchedStage, batchedScene, assistant) {
     if (this.immediateCalled !== immediate) {
-        assistant.failure("Unexpected immediate called state: " + this.immediateCalled);
+        assistant.failure("Unexpected immediate called state: " + this.immediateCalled + " Expected: " + immediate);
     }
     if (this.stageCalled !== stage) {
-        assistant.failure("Unexpected stage called state: " + this.stageCalled);
+        assistant.failure("Unexpected stage called state: " + this.stageCalled + " Expected: " + stage);
     }
     if (this.sceneCalled !== scene) {
-        assistant.failure("Unexpected scene called state: " + this.sceneCalled);
+        assistant.failure("Unexpected scene called state: " + this.sceneCalled + " Expected: " + scene);
     }
     if (this.batchedImmediateCalled !== immediate) {
-        assistant.failure("Unexpected batched immediate called state: " + this.immediateCalled);
+        assistant.failure("Unexpected batched immediate called state: " + this.batchedImmediateCalled + " Expected: " + immediate);
     }
     if (this.batchedStageCalled !== batchedStage) {
-        assistant.failure("Unexpected batched stage called state: " + this.stageCalled);
+        assistant.failure("Unexpected batched stage called state: " + this.batchedStageCalled + " Expected: " + batchedStage);
     }
     if (this.batchedSceneCalled !== batchedScene) {
-        assistant.failure("Unexpected batched scene called state: " + this.sceneCalled);
+        assistant.failure("Unexpected batched scene called state: " + this.batchedSceneCalled + " Expected: " + batchedScene);
     }
 };
 ObserverManagerTest.prototype.resetObservers = function() {
