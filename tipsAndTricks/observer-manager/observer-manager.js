@@ -3,11 +3,11 @@
 /**
  * Helper class that allows monitoring of observable objects, providing the option to defer any actions
  * until the associated scene or stage is active.
- * 
- * @param sceneController Controller of the scene this observer is to be associated with.
+ *
+ * @param controller Scene controller or stage controller to manage.
  */
-var ObserverManager = function(sceneController) {
-    this.sceneController = sceneController;
+var ObserverManager = function(controller) {
+    this.controller = controller;
     this.observers = [];
 
     this.sceneActivatedHandler = this.sceneActivated.bindAsEventListener(this);
@@ -18,35 +18,41 @@ var ObserverManager = function(sceneController) {
 
 ObserverManager.prototype = {
     /**
-     * Initializes this manager. This should be called in the associated scene's
+     * Initializes this manager. This should be called in the associated scene's or stages's
      * setup method.
+     * @param stageLaunching True if this being called while the stage is still being setup
      */
-    setup: function() {
-        var sceneController = this.sceneController,
-            sceneElement = sceneController.sceneElement,
-            stageDoc = sceneController.document;
+    setup: function(stageLaunching) {
+        var controller = this.controller,
+            stageController = controller.stageController || controller,
+            sceneElement = controller.sceneElement,
+            stageDoc = controller.document;
 
-        sceneElement.addEventListener(Mojo.Event.activate, this.sceneActivatedHandler, false);
-        sceneElement.addEventListener(Mojo.Event.deactivate, this.sceneDeactivatedHandler, false);
-        stageDoc.addEventListener(Mojo.Event.activate, this.stageActivatedHandler, false);
-        stageDoc.addEventListener(Mojo.Event.deactivate, this.stageDeactivatedHandler, false);
+        if (sceneElement) {
+            sceneElement.addEventListener(Mojo.Event.activate, this.sceneActivatedHandler, false);
+            sceneElement.addEventListener(Mojo.Event.deactivate, this.sceneDeactivatedHandler, false);
+        }
+        stageDoc.addEventListener(this.getStageActivateEvent(), this.stageActivatedHandler, false);
+        stageDoc.addEventListener(this.getStageDeactivateEvent(), this.stageDeactivatedHandler, false);
 
-        this.stageActive = sceneController.stageController.active;
-        this.sceneActive = sceneController.stageController.topScene() == sceneController;
+        this.stageActive = stageLaunching || (stageController.isActive ? stageController.isActive() : stageController.active);
+        this.sceneActive = stageController.topScene() == controller;
     },
 
     /**
      * Cleans the manager. This should be called in the associated scene's cleanup method.
      */
     cleanup: function() {
-        var sceneElement = this.sceneController.sceneElement,
-            stageDoc = this.sceneController.document,
+        var sceneElement = this.controller.sceneElement,
+            stageDoc = this.controller.document,
             len = this.observers.length;
 
-        sceneElement.removeEventListener(Mojo.Event.activate, this.sceneActivatedHandler, false);
-        sceneElement.removeEventListener(Mojo.Event.deactivate, this.sceneDeactivatedHandler, false);
-        stageDoc.removeEventListener(Mojo.Event.activate, this.stageActivatedHandler, false);
-        stageDoc.removeEventListener(Mojo.Event.deactivate, this.stageDeactivatedHandler, false);
+        if (sceneElement) {
+            sceneElement.removeEventListener(Mojo.Event.activate, this.sceneActivatedHandler, false);
+            sceneElement.removeEventListener(Mojo.Event.deactivate, this.sceneDeactivatedHandler, false);
+        }
+        stageDoc.removeEventListener(this.getStageActivateEvent(), this.stageActivatedHandler, false);
+        stageDoc.removeEventListener(this.getStageDeactivateEvent(), this.stageDeactivatedHandler, false);
 
         // Unregister all observers to we do not maintain a reference to ourselves... and the controller.... and.....
         while (len--) {
@@ -101,10 +107,10 @@ ObserverManager.prototype = {
 
     notifyObserver: function(observer, data) {
         if (!this.isDeferred(observer)) {
-            Mojo.Log.info("ObserverManager.notify %s %s", this.sceneController.sceneName, this.sceneController.window.name);
             observer.observer.call(undefined, data);
+            Mojo.Log.info("ObserverManager.notify %s %s", this.controller.sceneName, this.controller.window.name);
         } else {
-            Mojo.Log.info("ObserverManager.defer %s %s", this.sceneController.sceneName, this.sceneController.window.name);
+            Mojo.Log.info("ObserverManager.defer %s %s", this.controller.sceneName, this.controller.window.name);
             var deferred = observer.batchNotifications ? [] : observer.deferred;
             deferred.push(data);
             observer.deferred = deferred;
@@ -112,22 +118,22 @@ ObserverManager.prototype = {
     },
 
     sceneActivated: function(event) {
-        Mojo.Log.info("ObserverManager.sceneActivated %s %s", this.sceneController.sceneName, this.sceneController.window.name);
+        Mojo.Log.info("ObserverManager.sceneActivated %s %s", this.controller.sceneName, this.controller.window.name);
         this.sceneActive = true;
         this.notifyDeferred();
     },
     sceneDeactivated: function(event) {
-        Mojo.Log.info("ObserverManager.sceneDeactivated %s %s", this.sceneController.sceneName, this.sceneController.window.name);
+        Mojo.Log.info("ObserverManager.sceneDeactivated %s %s", this.controller.sceneName, this.controller.window.name);
         this.sceneActive = false;
     },
 
     stageActivated: function(event) {
-        Mojo.Log.info("ObserverManager.stageActivated %s %s", this.sceneController.sceneName, this.sceneController.window.name);
+        Mojo.Log.info("ObserverManager.stageActivated %s %s", this.controller.sceneName, this.controller.window.name);
         this.stageActive = true;
         this.notifyDeferred();
     },
     stageDeactivated: function(event) {
-        Mojo.Log.info("ObserverManager.stageDeactivated %s %s", this.sceneController.sceneName, this.sceneController.window.name);
+        Mojo.Log.info("ObserverManager.stageDeactivated %s %s", this.controller.sceneName, this.controller.window.name);
         this.stageActive = false;
     },
 
@@ -136,13 +142,13 @@ ObserverManager.prototype = {
         var len = this.observers.length;
         for (var i = 0; i < len; i++) {
             var data = this.observers[i];
-            Mojo.Log.info("ObserverManager.notifyDeferred: check %d %d %s %s", i, data.deferred.length, this.sceneController.sceneName, this.sceneController.window.name);
+            Mojo.Log.info("ObserverManager.notifyDeferred: check %d %d %s %s", i, data.deferred.length, this.controller.sceneName, this.controller.window.name);
             if (data.deferred.length && !this.isDeferred(data)) {
                 var deferred = data.deferred,
                     deferredLen = deferred.length;
                 for (var deferredIter = 0; deferredIter < deferredLen; deferredIter++) {
                     // Irony... Dump off the callstack for each of these calls to isolate each handler
-                    Mojo.Log.info("ObserverManager.notifyDeferred: %d %s %s", i, this.sceneController.sceneName, this.sceneController.window.name);
+                    Mojo.Log.info("ObserverManager.notifyDeferred: %d %s %s", i, this.controller.sceneName, this.controller.window.name);
                     data.observer.curry(deferred[deferredIter]).defer();
                 }
                 data.deferred = [];
@@ -151,10 +157,17 @@ ObserverManager.prototype = {
     },
 
     isDeferred: function(observer) {
-        Mojo.Log.info("ObserverManager.isDeferred %s %d %d %s %s", observer.deferUntil, this.sceneActive, this.stageActive, this.sceneController.sceneName, this.sceneController.window.name);
+        Mojo.Log.info("ObserverManager.isDeferred %s %d %d %s %s", observer.deferUntil, this.sceneActive, this.stageActive, this.controller.sceneName, this.controller.window.name);
         return (observer.deferUntil === ObserverManager.DeferUntil.SceneActive && !(this.sceneActive && this.stageActive))
             || (observer.deferUntil === ObserverManager.DeferUntil.StageActive && !this.stageActive);
-    }
+    },
+
+    getStageActivateEvent: function() {
+        return Mojo.Event.stageActivate || Mojo.Event.activate;
+    },
+    getStageDeactivateEvent: function() {
+        return Mojo.Event.stageDeactivate || Mojo.Event.deactivate;
+    },
 };
 
 /**

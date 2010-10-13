@@ -18,10 +18,10 @@ ObserverManagerTest.prototype.exec = function(assistant, cont) {
 
     this.resetObservers();
 
-    this.waitForDeactivation(
+    this.waitForStageDeactivation(
             stageController.document,
             function() {
-                self.waitForActivation(
+                self.waitForStageActivation(
                     stageController.document,
                     function() { self.stageActivatedTest(assistant, observable); },
                     500)
@@ -36,8 +36,10 @@ ObserverManagerTest.prototype.exec = function(assistant, cont) {
                     }, 500);
                 self.deactivatedTest(assistant, observable);
 
-                var otherStage = Mojo.Controller.getAppController().getStageController("otherStage");
-                otherStage.window.close();
+                setTimeout(function() {
+                    // Defer some to prevent some sort of blowup here
+                    Mojo.Controller.getAppController().closeStage("otherStage");
+                }, 1000);
                 stageController.activate();
             });
 
@@ -92,10 +94,10 @@ ObserverManagerTest.prototype.bounceStage = function(firstController, secondCont
 
     // This forces the first scene into a deactivated state. Currently the deactivated message is not
     // being sent immediately after a createStageWithCallback.
-    this.waitForActivation(
+    this.waitForStageActivation(
             secondController.document,
             function() {
-                self.waitForActivation(
+                self.waitForStageActivation(
                         firstController.document,
                         function() {
                             secondController.activate();
@@ -179,6 +181,12 @@ ObserverManagerTest.prototype.waitForEvent = function(node, name, cont, timeout)
             name,
             eventHandler,
             false);
+};
+ObserverManagerTest.prototype.waitForStageActivation = function(node, cont, timeout) {
+    this.waitForEvent(node, Mojo.Event.stageActivate || Mojo.Event.activate, cont, timeout);
+};
+ObserverManagerTest.prototype.waitForStageDeactivation = function(node, cont, timeout) {
+    this.waitForEvent(node, Mojo.Event.stageDeactivate || Mojo.Event.deactivate, cont, timeout);
 };
 ObserverManagerTest.prototype.waitForActivation = function(node, cont, timeout) {
     this.waitForEvent(node, Mojo.Event.activate, cont, timeout);
