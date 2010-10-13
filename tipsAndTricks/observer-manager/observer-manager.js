@@ -1,4 +1,5 @@
 /* Copyright 2010 Palm, Inc. All rights reserved. */
+/*global Mojo:false */
 
 /**
  * Helper class that allows monitoring of observable objects, providing the option to defer any actions
@@ -36,7 +37,7 @@ ObserverManager.prototype = {
         stageDoc.addEventListener(this.getStageDeactivateEvent(), this.stageDeactivatedHandler, false);
 
         this.stageActive = stageLaunching || (stageController.isActive ? stageController.isActive() : stageController.active);
-        this.sceneActive = stageController.topScene() == controller;
+        this.sceneActive = stageController.topScene() === controller;
     },
 
     /**
