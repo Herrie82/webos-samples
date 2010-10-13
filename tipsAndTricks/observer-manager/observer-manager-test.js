@@ -6,11 +6,14 @@ ObserverManagerTest.prototype.exec = function(assistant, cont) {
     var stageController = assistant.controller.stageController,
         observable = new Observable(),
         observerManager = new ObserverManager(assistant.controller),
+        stageObserverManager = new ObserverManager(assistant.controller.stageController),
         self = this;
 
     observerManager.setup();
+    stageObserverManager.setup();
     this.resetObservers();
     this.registerObservers(observerManager, observable);
+    this.registerObservers(stageObserverManager, observable);
 
     this.activeTest(assistant, observable);
 
@@ -60,33 +63,33 @@ ObserverManagerTest.prototype.activeTest = function(assistant, observable) {
     observable.notifyObservers("test");
     observable.notifyObservers("test");
     observable.notifyObservers("test");
-    this.verifyObservers(3, 3, 3, 3, 3, assistant);
+    this.verifyObservers(6, 6, 3, 6, 3, assistant);
 
     observable.notifyObservers("test");
-    this.verifyObservers(4, 4, 4, 4, 4, assistant);
+    this.verifyObservers(8, 8, 4, 8, 4, assistant);
 };
 ObserverManagerTest.prototype.deactivatedTest = function(assistant, observable) {
     observable.notifyObservers("test");
     observable.notifyObservers("test");
 
-    this.verifyObservers(2, 0, 0, 0, 0, assistant);
+    this.verifyObservers(4, 0, 0, 0, 0, assistant);
 };
 
 ObserverManagerTest.prototype.stageActivatedTest = function(assistant, observable) {
-    this.verifyObservers(2, 2, 0, 1, 0, assistant);
+    this.verifyObservers(4, 4, 0, 2, 0, assistant);
 
     observable.notifyObservers("test");
 
-    this.verifyObservers(3, 3, 0, 2, 0, assistant);
+    this.verifyObservers(6, 6, 0, 4, 0, assistant);
 
     assistant.controller.stageController.popScene();
 };
 ObserverManagerTest.prototype.sceneActivatedTest = function(assistant, observable) {
-    this.verifyObservers(3, 3, 3, 2, 1, assistant);
+    this.verifyObservers(6, 6, 3, 4, 1, assistant);
 
     observable.notifyObservers("test");
 
-    this.verifyObservers(4, 4, 4, 3, 2, assistant);
+    this.verifyObservers(8, 8, 4, 6, 2, assistant);
 };
 
 ObserverManagerTest.prototype.bounceStage = function(firstController, secondController) {
