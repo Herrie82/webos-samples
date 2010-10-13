@@ -13,6 +13,7 @@ DataModelBaseTest.prototype.exec = function(assistant, cont) {
             this.cacheExpandTest,
             this.overlappingRequestsTest,
             this.refreshTest,
+            this.cancelTest,
             this.headPendingTest,
             this.preSeedHeadPendingTest,
             this.tailPendingTest,
@@ -479,6 +480,37 @@ DataModelBaseTest.prototype.refreshTest = function(assistant, cont) {
             assistant.failure("Recieved failure");
             cont();
         });
+};
+
+DataModelBaseTest.prototype.cancelTest = function(assistant, cont) {
+    var runCount = 0;
+    var dataModel = new DataModelTest({
+        maxCount: 10,
+        lookahead: 2,
+        initialPageSize: 6
+    });
+
+    // Allow us to stack a few requests
+    dataModel.blockTimeout = 100;
+    dataModel.offset = 10;
+
+    // Load in process
+    dataModel.getRange(4, 2,
+        function(offset, limit, results) {
+            assistant.failure("Recieved success after canceled call " + offset + " " + limit + " " + results);
+        },
+        function(failure) {
+            Mojo.Log.info("Failure");
+            cont();
+        });
+
+    // Ensure that cancel happens after the above request has been primed
+    dataModel.refreshQueue.queue({
+        onSuccess: function() {
+            dataModel.cancel();
+            dataModel.blockTimeout = 0;
+        }
+    });
 };
 
 DataModelBaseTest.prototype.headPendingTest = function(assistant, cont) {

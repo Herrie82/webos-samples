@@ -111,6 +111,7 @@ var DataModelBase = Class.create(Observable, {
      * Cancels all pending requests.
      */
     cancel: function() {
+        Mojo.Log.info("Cancel %s sequence: %d", this.getCacheName(), this.sequenceId);
         // Cleanup our internal structures.
         this.cancelWorker();
 
@@ -131,7 +132,7 @@ var DataModelBase = Class.create(Observable, {
                 delete this.pendingRequests[i];
             }
         }
-        this.sequenceNum++;
+        this.sequenceId++;
 
         this.refreshQueue.getSuccessHandler()();
     },
