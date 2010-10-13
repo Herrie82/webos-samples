@@ -14,6 +14,7 @@ DataModelBaseTest.prototype.exec = function(assistant, cont) {
             this.overlappingRequestsTest,
             this.refreshTest,
             this.cancelTest,
+            this.failureTest,
             this.headPendingTest,
             this.preSeedHeadPendingTest,
             this.tailPendingTest,
@@ -513,6 +514,68 @@ DataModelBaseTest.prototype.cancelTest = function(assistant, cont) {
     });
 };
 
+DataModelBaseTest.prototype.failureTest = function(assistant, cont) {
+    var runCount = 0;
+    var dataModel = new DataModelTest({
+        maxCount: 10,
+        lookahead: 2,
+        initialPageSize: 6
+    });
+
+    // Allow us to stack a few requests
+    dataModel.blockTimeout = 100;
+    dataModel.offset = 10;
+    dataModel.shouldFail = "FAIL";
+
+    dataModel.getRange(4, 2,
+        function(offset, limit, results) {
+            assistant.failure("Recieved success after failure 1");
+        },
+        function(offset, limit, failure) {
+            Mojo.Log.info("FailureTest: result 1");
+            if (failure !== "FAIL") {
+                assistant.failure("Unexpected failure value: " + failure);
+            }
+            if (offset !== 0) {     // loadRange request offset
+                assistant.failure("Unexpected failure offset: " + offset);
+            }
+            if (limit !== 8) {      // loadRange request limit
+                assistant.failure("Unexpected failure limit: " + limit);
+            }
+            if (runCount++ !== 0) {
+                assistant.failure("Unexpected run count: exec 1");
+            }
+        });
+
+    dataModel.getRange(4, 2,
+        function(offset, limit, results) {
+            assistant.failure("Recieved success after failure 2");
+        },
+        function(offset, limit, failure) {
+            Mojo.Log.info("FailureTest: result 2");
+            if (failure !== "FAIL") {
+                assistant.failure("Unexpected failure value: " + failure);
+            }
+            if (offset !== 0) {     // loadRange request offset
+                assistant.failure("Unexpected failure offset: " + offset);
+            }
+            if (limit !== 8) {      // loadRange request limit
+                assistant.failure("Unexpected failure limit: " + limit);
+            }
+            if (runCount++ !== 1) {
+                assistant.failure("Unexpected run count: exec 2");
+            }
+            cont();
+        });
+
+    dataModel.refreshQueue.queue({
+        onSuccess: function() {
+            Mojo.Log.info("Block timeout: %j", dataModel.blockedRequests);
+            dataModel.blockTimeout = 0;
+        }
+    });
+};
+
 DataModelBaseTest.prototype.headPendingTest = function(assistant, cont) {
     var runCount = 0;
     var dataModel = new DataModelTest({
@@ -827,6 +890,11 @@ var DataModelTest = Class.create(DataModelBase, {
             setTimeout(function() {
                 self.loadRange(offset, limit, onSuccess, onFailure);
             }, this.blockTimeout);
+            return;
+        }
+
+        if (this.shouldFail) {
+            onFailure(this.shouldFail);
             return;
         }
 

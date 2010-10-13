@@ -296,7 +296,7 @@ var DataModelBase = Class.create(Observable, {
             this.loadRangeWorker(
                     readOffset, readLimit,
                     this.loadRangeSuccessHandler.bind(this, this.sequenceId, readOffset, readLimit, this.headPending.length),
-                    this.loadRangeFailureHandler.bind(this, readOffset, readLimit));
+                    this.loadRangeFailureHandler.bind(this, this.sequenceId, readOffset, readLimit));
         }
     },
     loadRangeWorker: function(offset, limit, successHandler, failureHandler) {
@@ -329,6 +329,7 @@ var DataModelBase = Class.create(Observable, {
     },
 
     loadRangeSuccessHandler: function(sequenceId, readOffset, readLimit, headOffset, results, resultOffset, responseLen) {
+        Mojo.Log.info("Load range success: this.sequenceId: %d sequenceId: %d", this.sequenceId, sequenceId);
         if (sequenceId !== this.sequenceId) {
             Mojo.Log.info("Ignoring remote %s response due to invalid sequence sequnceId: %d readLimit: %d  known: %d results: %d resultOffset: %d responseLen: %d", this.getCacheName(), sequenceId, readLimit, this.getKnownSize(), results.length, resultOffset, responseLen);
             return;
@@ -378,6 +379,7 @@ var DataModelBase = Class.create(Observable, {
         this.notifyLengthObservers();
     },
     loadRangeFailureHandler: function(sequenceId, readOffset, readLimit, response) {
+        Mojo.Log.info("Load range failure: this.sequenceId: %d sequenceId: %d readOffset: %d readLimit: %d", this.sequenceId, sequenceId, readOffset, readLimit);
         if (sequenceId !== this.sequenceId) {
             Mojo.Log.info("Ignoring remote %s failure response due to invalid sequence sequnceId: %d readOffset: %d readLimit: %d ", this.getCacheName(), sequenceId, readOffset, readLimit);
             return;
@@ -388,7 +390,7 @@ var DataModelBase = Class.create(Observable, {
         for (var i = 0; i < len; i++) {
             var entry = this.blockedRequests[i];
             if (this.rangeOverlap(readRange, entry)) {
-                Mojo.Log.info("Process blocked request: %j", entry);
+                Mojo.Log.info("Process failure blocked request: %j", entry);
                 entry.onFailure && entry.onFailure.curry(readOffset, readLimit, response).defer();
 
                 this.blockedRequests.splice(i, 1);
