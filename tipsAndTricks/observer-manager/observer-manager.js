@@ -108,8 +108,12 @@ ObserverManager.prototype = {
 
     notifyObserver: function(observer, data) {
         if (!this.isDeferred(observer)) {
-            observer.observer.call(undefined, data);
             Mojo.Log.info("ObserverManager.notify %s %s", this.controller.sceneName, this.controller.window.name);
+            try {
+                observer.observer.call(undefined, data);
+            } catch (err) {
+                Mojo.Log.error("Error processing manager.notifyObservers: %s %s", err, err && err.stack);
+            }
         } else {
             Mojo.Log.info("ObserverManager.defer %s %s", this.controller.sceneName, this.controller.window.name);
             var deferred = observer.batchNotifications ? [] : observer.deferred;

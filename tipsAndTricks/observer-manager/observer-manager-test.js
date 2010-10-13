@@ -110,6 +110,10 @@ ObserverManagerTest.prototype.bounceStage = function(firstController, secondCont
 ObserverManagerTest.prototype.registerObservers = function(observerManager, observable) {
     var self = this;
     observerManager.observe(observable, function(data) {
+            // Error first and last, should not modify our counts at all
+            throw new Error();
+        });
+    observerManager.observe(observable, function(data) {
             self.immediateCalled++;
         });
     observerManager.observe(observable, function(data) {
@@ -135,6 +139,10 @@ ObserverManagerTest.prototype.registerObservers = function(observerManager, obse
         },
         ObserverManager.DeferUntil.SceneActive,
         true);
+    observerManager.observe(observable, function(data) {
+            // Error first and last, should not modify our counts at all
+            throw new Error();
+        });
 };
 ObserverManagerTest.prototype.verifyObservers = function(immediate, stage, scene, batchedStage, batchedScene, assistant) {
     if (this.immediateCalled !== immediate) {
