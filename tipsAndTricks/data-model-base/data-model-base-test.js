@@ -109,7 +109,7 @@ DataModelBaseTest.prototype.outOfSightOffset = function(assistant, cont) {
             verifyRange(
                 assistant, {
                     offset: 12,
-                    limit: 2,
+                    limit: 0,
                     complete: true,
                     knownSize: 10,
                     loadRangeCount: 1,
@@ -211,7 +211,7 @@ DataModelBaseTest.prototype.depotCacheReadTest = function(assistant, cont) {
                             verifyRange(
                                 assistant, {
                                     offset: 0,
-                                    limit: 10,
+                                    limit: 8,
                                     complete: false,
                                     knownSize: 8,
                                     loadRangeCount: 0,
@@ -265,7 +265,7 @@ DataModelBaseTest.prototype.cacheExpandTest = function(assistant, cont) {
         },
         {
             offset: 8,
-            limit: 7,
+            limit: 2,
             knownSize: 10,
             complete: true,
             loadRangeCount: 2,
@@ -693,9 +693,9 @@ DataModelBaseTest.prototype.preSeedHeadPendingTest = function(assistant, cont) {
             offset: 2,
             limit: 1,
             complete: false,
-            knownSize: 6,
+            knownSize: 8,
             loadRangeCount: 1,
-            loadRange: { offset: 0, limit: 4 },
+            loadRange: { offset: 0, limit: 6 },
             results: [ 10 ],
             headPending: [ 11, 12 ]
         },
@@ -703,7 +703,7 @@ DataModelBaseTest.prototype.preSeedHeadPendingTest = function(assistant, cont) {
             offset: 0,
             limit: 3,
             complete: false,
-            knownSize: 6,
+            knownSize: 8,
             results: [ 11, 12, 10 ],
             headPending: [ 11, 12 ]
         }
