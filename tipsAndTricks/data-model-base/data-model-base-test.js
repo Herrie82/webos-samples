@@ -176,7 +176,8 @@ DataModelBaseTest.prototype.cacheReadTest = function(assistant, cont) {
 DataModelBaseTest.prototype.depotCacheReadTest = function(assistant, cont) {
     var dataModel = new DataModelTest({
         maxCount: 10,
-        lookahead: 2
+        lookahead: 2,
+        cacheSaveDelay: 0
     });
     dataModel.getCacheName = function() { return "dataModelTest-Depot"; };
 
@@ -196,7 +197,8 @@ DataModelBaseTest.prototype.depotCacheReadTest = function(assistant, cont) {
 
             dataModel = new DataModelTest({
                 maxCount: 10,
-                lookahead: 2
+                lookahead: 2,
+                cacheSaveDelay: 0
             });
             dataModel.getCacheName = function() { return "dataModelTest-Depot"; };
 
