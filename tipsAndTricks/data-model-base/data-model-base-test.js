@@ -16,8 +16,10 @@ DataModelBaseTest.prototype.exec = function(assistant, cont) {
             this.cancelTest,
             this.failureTest,
             this.headPendingTest,
+            this.headPendingInprocessTest,
             this.preSeedHeadPendingTest,
             this.tailPendingTest,
+            this.tailPendingInprocessTest,
             this.tailPendingRemoveTest,
         ], 0)();
 };
@@ -674,6 +676,52 @@ DataModelBaseTest.prototype.headPendingTest = function(assistant, cont) {
         });
 };
 
+DataModelBaseTest.prototype.headPendingInprocessTest = function(assistant, cont) {
+    var runCount = 0;
+    var dataModel = new DataModelTest({
+        maxCount: 10,
+        lookahead: 1
+    }),
+    expected = [
+        {
+            offset: 0,
+            limit: 4,
+            complete: false,
+            knownSize: 7,
+            loadRangeCount: 1,
+            loadRange: { offset: 0, limit: 5 },
+            results: [ 11, 12, 10, 9 ],
+            headPending: [ 11, 12 ]
+        }
+    ];
+
+    dataModel.blockTimeout = 100;
+
+    dataModel.getRange(0, 4,
+        function(offset, limit, results) {
+            verifyRange(assistant, expected[runCount++], dataModel, offset, limit, results);
+            if (runCount === 1) {
+                cont();
+            } else {
+                assistant.failure("Multiple calls made");
+            }
+        },
+        function(failure) {
+            assistant.failure("Recieved failure");
+            cont();
+        });
+
+    dataModel.refreshQueue.queue({
+        onSuccess: function() {
+            dataModel.addPending(12, false);
+            dataModel.addPending(11, false);
+
+            Mojo.Log.info("Block timeout: %j", dataModel.blockedRequests);
+            dataModel.blockTimeout = 0;
+        }
+    });
+};
+
 DataModelBaseTest.prototype.preSeedHeadPendingTest = function(assistant, cont) {
     var runCount = 0;
     var dataModel = new DataModelTest({
@@ -810,6 +858,70 @@ DataModelBaseTest.prototype.tailPendingTest = function(assistant, cont) {
         });
 };
 
+DataModelBaseTest.prototype.tailPendingInprocessTest = function(assistant, cont) {
+    var runCount = 0;
+    var dataModel = new DataModelTest({
+        maxCount: 10,
+        lookahead: 1
+    }),
+    expected = [
+        {
+            offset: 0,
+            limit: 1,
+            complete: false,
+            knownSize: 1,
+            loadRangeCount: 0,
+            results: [ 12 ],
+            headPending: [],
+            tailPending: [ 12 ]
+        },
+        {
+            offset: 0,
+            limit: 2,
+            complete: false,
+            knownSize: 2,
+            loadRangeCount: 0,
+            results: [ 12, 11 ],
+            headPending: [],
+            tailPending: [ 12, 11 ]
+        },
+        {
+            offset: 0,
+            limit: 4,
+            complete: false,
+            knownSize: 7,
+            loadRangeCount: 1,
+            loadRange: { offset: 0, limit: 5 },
+            results: [ 10, 9, 8, 7 ],
+            headPending: []
+        }
+    ];
+
+    dataModel.blockTimeout = 100;
+
+    dataModel.getRange(0, 4,
+        function(offset, limit, results) {
+            verifyRange(assistant, expected[runCount++], dataModel, offset, limit, results);
+            if (runCount === 1) {
+                dataModel.addPending(11, true);
+            } else if (runCount === 2) {
+                dataModel.blockTimeout = 0;
+            } else if (runCount === 3) {
+                cont();
+            }
+        },
+        function(failure) {
+            assistant.failure("Recieved failure");
+            cont();
+        });
+
+    dataModel.refreshQueue.queue({
+        onSuccess: function() {
+            dataModel.addPending(12, true);
+        }
+    });
+};
+
 DataModelBaseTest.prototype.tailPendingRemoveTest = function(assistant, cont) {
     var runCount = 0;
     var dataModel = new DataModelTest({
@@ -891,7 +1003,6 @@ DataModelBaseTest.prototype.tailPendingRemoveTest = function(assistant, cont) {
         });
 };
 
-// TODO : Pending + Refresh test
 
 var DataModelTest = Class.create(DataModelBase, {
     initialize: function($super, options) {

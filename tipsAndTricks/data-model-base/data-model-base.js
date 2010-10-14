@@ -194,6 +194,7 @@ var DataModelBase = Class.create(Observable, {
     addPending: function(item, tail) {
         if (tail) {
             this.tailPending.push(item);
+            this.notifyPendingRequests();
         } else {
             this.headPending.unshift(item);
         }
@@ -354,7 +355,7 @@ var DataModelBase = Class.create(Observable, {
         Mojo.Log.info("Loaded %s from remote. readLimit: %d  known: %d results: %d resultOffset: %d responseLen: %d", this.getCacheName(), readLimit, this.getKnownSize(), results.length, resultOffset, responseLen);
 
         // Load the new data into the memory cache
-        var spliceArgs = $A(results);
+        var spliceArgs = results.slice();
         spliceArgs.unshift(readOffset+resultOffset, results.length);
         this.cache.splice.apply(this.cache, spliceArgs);
 
@@ -417,7 +418,6 @@ var DataModelBase = Class.create(Observable, {
     },
 
     notifyPendingRequests: function() {
-        // TODO : Add tests for this with pending data involved
         var len = this.blockedRequests.length,
             cacheLen = this.headPending.length + this.cache.length + this.tailPending.length;
         for (var i = 0; i < len; i++) {
