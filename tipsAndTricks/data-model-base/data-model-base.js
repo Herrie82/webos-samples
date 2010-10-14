@@ -451,7 +451,7 @@ var DataModelBase = Class.create(Observable, {
         var headUsed = cacheRet.length;
 
         // Adjust the offset to be relative to the cache
-        remainingOffset = Math.max(0, remainingOffset-headUsed);
+        remainingOffset += headUsed;
         remainingLimit -= headUsed;
 
         dataOffset = this.extractFromArray(dataOffset, remainingLimit, this.cache, cacheRet);
