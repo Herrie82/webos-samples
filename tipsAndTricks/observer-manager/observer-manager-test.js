@@ -60,6 +60,7 @@ ObserverManagerTest.prototype.exec = function(assistant, cont) {
 };
 
 ObserverManagerTest.prototype.activeTest = function(assistant, observable) {
+    Mojo.Log.info("activeTest");
     observable.notifyObservers("test");
     observable.notifyObservers("test");
     observable.notifyObservers("test");
@@ -69,6 +70,7 @@ ObserverManagerTest.prototype.activeTest = function(assistant, observable) {
     this.verifyObservers(8, 8, 4, 8, 4, assistant);
 };
 ObserverManagerTest.prototype.deactivatedTest = function(assistant, observable) {
+    Mojo.Log.info("deactivatedTest");
     observable.notifyObservers("test");
     observable.notifyObservers("test");
 
@@ -76,6 +78,7 @@ ObserverManagerTest.prototype.deactivatedTest = function(assistant, observable) 
 };
 
 ObserverManagerTest.prototype.stageActivatedTest = function(assistant, observable) {
+    Mojo.Log.info("stageActivatedTest");
     this.verifyObservers(4, 4, 0, 2, 0, assistant);
 
     observable.notifyObservers("test");
@@ -85,6 +88,7 @@ ObserverManagerTest.prototype.stageActivatedTest = function(assistant, observabl
     assistant.controller.stageController.popScene();
 };
 ObserverManagerTest.prototype.sceneActivatedTest = function(assistant, observable) {
+    Mojo.Log.info("sceneActivatedTest");
     this.verifyObservers(6, 6, 3, 4, 1, assistant);
 
     observable.notifyObservers("test");
@@ -93,6 +97,7 @@ ObserverManagerTest.prototype.sceneActivatedTest = function(assistant, observabl
 };
 
 ObserverManagerTest.prototype.bounceStage = function(firstController, secondController) {
+    Mojo.Log.info("bounceStage");
     var self = this;
 
     // This forces the first scene into a deactivated state. Currently the deactivated message is not
